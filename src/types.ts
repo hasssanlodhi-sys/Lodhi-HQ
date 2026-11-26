@@ -19,6 +19,8 @@ export interface Member {
   businessTags: TagId[];
   contact: string;
   owner?: boolean;
+  email?: string;
+  active?: boolean;
 }
 
 export interface Task {

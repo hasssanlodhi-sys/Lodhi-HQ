@@ -1,4 +1,4 @@
-import type { Priority, Task } from '../types';
+import type { Member, Priority, Task } from '../types';
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
@@ -6,6 +6,10 @@ export function cx(...parts: Array<string | false | null | undefined>): string {
 
 export function uid(prefix = 'id'): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`;
+}
+
+export function assignableMembers(members: Member[], selectedId?: string): Member[] {
+  return members.filter((member) => member.active !== false || member.id === selectedId);
 }
 
 export function memberName(members: { id: string; name: string }[], id: string): string {

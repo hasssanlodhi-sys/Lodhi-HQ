@@ -1,0 +1,12 @@
+# SPA fallback for Lodhi HQ. Upload this file to public_html with the rest of dist/.
+# /api/ is handled by api/.htaccess and must not be rewritten to index.html.
+Options -Indexes
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  RewriteRule ^api(/|$) - [L]
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+  RewriteRule ^ index.html [L]
+</IfModule>

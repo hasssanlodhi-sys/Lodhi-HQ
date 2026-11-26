@@ -17,7 +17,7 @@ import {
   startOfWeek,
 } from '../lib/dates';
 import { TAGS, TAG_LIST } from '../lib/tags';
-import { DAY_END_HOUR, DAY_START_HOUR, HOUR_PX, OVERLOAD_MINUTES, OWNER_ID, type TagId, type Task } from '../types';
+import { DAY_END_HOUR, DAY_START_HOUR, HOUR_PX, OVERLOAD_MINUTES, type TagId, type Task } from '../types';
 import { cx, formatHours, memberName, shortName } from '../lib/utils';
 import { Button, PageHeader, TagPill } from '../components/ui';
 
@@ -120,7 +120,7 @@ function blockRange(task: Task): string {
 }
 
 export function CalendarPage() {
-  const { state, now, openTask, openNewTask, reschedule } = useApp();
+  const { state, now, openTask, openNewTask, reschedule, currentUser } = useApp();
   const [cursor, setCursor] = useState(() => startOfDay(new Date()));
   const [mode, setMode] = useState<Mode>('day');
   const [tag, setTag] = useState<TagId | 'all'>('all');
@@ -133,11 +133,11 @@ export function CalendarPage() {
     () =>
       state.tasks.filter((task) => {
         if (tag !== 'all' && task.tag !== tag) return false;
-        if (scope === 'mine' && task.assigneeId !== OWNER_ID) return false;
+        if (scope === 'mine' && task.assigneeId !== currentUser.id) return false;
         if (!showDone && task.status === 'Done') return false;
         return true;
       }),
-    [state.tasks, tag, scope, showDone],
+    [state.tasks, tag, scope, showDone, currentUser.id],
   );
 
   const weekStart = startOfWeek(cursor);
@@ -192,7 +192,7 @@ export function CalendarPage() {
         if (!moved) openTask(task);
         else {
           const next = new Date(new Date(originDeadline).getTime() + deltaMin * 60_000);
-          reschedule(task.id, next.toISOString(), false);
+          void reschedule(task.id, next.toISOString(), false).catch(() => undefined);
         }
       },
     );
@@ -211,7 +211,7 @@ export function CalendarPage() {
         setDrag({ kind: 'place', id: task.id, over: !!deadline, deadline, moved });
       },
       () => {
-        if (deadline) reschedule(task.id, deadline, false);
+        if (deadline) void reschedule(task.id, deadline, false).catch(() => undefined);
       },
     );
   }
@@ -236,11 +236,11 @@ export function CalendarPage() {
         const day = hit?.getAttribute('data-drop-day');
         if (moved && day) {
           const target = parseDate(day);
-          if (task.allDay) reschedule(task.id, endOfDay(target).toISOString(), true);
-          else if (!task.deadline) reschedule(task.id, endOfDay(target).toISOString(), true);
+          if (task.allDay) void reschedule(task.id, endOfDay(target).toISOString(), true).catch(() => undefined);
+          else if (!task.deadline) void reschedule(task.id, endOfDay(target).toISOString(), true).catch(() => undefined);
           else {
             const prev = new Date(task.deadline);
-            reschedule(task.id, combine(target, prev.getHours(), prev.getMinutes()).toISOString(), false);
+            void reschedule(task.id, combine(target, prev.getHours(), prev.getMinutes()).toISOString(), false).catch(() => undefined);
           }
         } else if (!moved) openTask(task);
       },
@@ -272,7 +272,7 @@ export function CalendarPage() {
                 openNewTask({
                   deadline: combine(cursor, 9, 0).toISOString(),
                   tag: tag === 'all' ? 'personal' : tag,
-                  assigneeId: OWNER_ID,
+                  assigneeId: currentUser.id,
                 })
               }
             >

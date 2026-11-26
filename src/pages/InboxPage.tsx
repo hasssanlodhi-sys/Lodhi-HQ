@@ -4,8 +4,8 @@ import { useApp } from '../context/AppContext';
 import type { RouteState } from '../lib/router';
 import { addDays, formatShortDate, formatTime, inRange, sameDay, startOfDay, startOfWeek, fromDatetimeLocal } from '../lib/dates';
 import { TAG_LIST } from '../lib/tags';
-import { OWNER_ID, PRIORITIES, STATUSES, type Priority, type Status, type TagId, type Task } from '../types';
-import { blankTask, cx, formatDuration, memberName, priorityRank, shortName } from '../lib/utils';
+import { PRIORITIES, STATUSES, type Priority, type Status, type TagId, type Task } from '../types';
+import { assignableMembers, blankTask, cx, formatDuration, memberName, priorityRank, shortName } from '../lib/utils';
 import { Button, PageHeader, PriorityPill, StatusPill, TagPill } from '../components/ui';
 
 const DUE_FILTERS = ['all', 'overdue', 'today', 'tomorrow', 'week', 'later', 'none'] as const;
@@ -59,7 +59,7 @@ function dueText(task: Task, now: Date): { label: string; overdue: boolean } {
 }
 
 export function InboxPage({ route }: { route: RouteState }) {
-  const { state, now, openTask, saveTask, setStatus } = useApp();
+  const { state, now, openTask, saveTask, setStatus, currentUser } = useApp();
   const [filters, setFilters] = useState<Filters>(() => ({
     q: '',
     assignee: 'all',
@@ -70,7 +70,7 @@ export function InboxPage({ route }: { route: RouteState }) {
   const [title, setTitle] = useState('');
   const [quickTag, setQuickTag] = useState<TagId>('cell-phone');
   const [quickPriority, setQuickPriority] = useState<Priority>('Medium');
-  const [quickAssignee, setQuickAssignee] = useState(OWNER_ID);
+  const [quickAssignee, setQuickAssignee] = useState(currentUser.id);
   const [quickDue, setQuickDue] = useState('');
 
   useEffect(() => {
@@ -103,26 +103,37 @@ export function InboxPage({ route }: { route: RouteState }) {
 
   const openCount = state.tasks.filter((task) => task.status !== 'Done').length;
 
-  function quickAdd() {
+  async function quickAdd() {
     if (!title.trim()) return;
     const deadline = quickDue ? fromDatetimeLocal(quickDue)?.toISOString() ?? null : null;
-    saveTask(
-      blankTask({
-        title,
-        tag: filters.tag === 'all' ? quickTag : filters.tag,
-        priority: quickPriority,
-        assigneeId: quickAssignee,
-        deadline,
-        allDay: false,
-      }),
-    );
-    setTitle('');
-    setQuickDue('');
+    try {
+      await saveTask(
+        blankTask({
+          title,
+          tag: filters.tag === 'all' ? quickTag : filters.tag,
+          priority: quickPriority,
+          assigneeId: quickAssignee,
+          deadline,
+          allDay: false,
+        }),
+      );
+      setTitle('');
+      setQuickDue('');
+    } catch {
+      /* The shell banner shows the error. */
+    }
   }
 
   return (
     <div>
-      <PageHeader title="Task inbox" subtitle={`${openCount} open across the businesses. ${visible.length} shown.`} />
+      <PageHeader
+        title="Task inbox"
+        subtitle={
+          currentUser.owner
+            ? `${openCount} open across the businesses. ${visible.length} shown.`
+            : `${openCount} open for you. ${visible.length} shown.`
+        }
+      />
 
       <form
         className="card mb-4 p-3"
@@ -153,7 +164,7 @@ export function InboxPage({ route }: { route: RouteState }) {
               ))}
             </select>
             <select className="field" aria-label="Assignee" value={quickAssignee} onChange={(e) => setQuickAssignee(e.target.value)}>
-              {state.members.map((member) => (
+              {assignableMembers(state.members, quickAssignee).map((member) => (
                 <option key={member.id} value={member.id}>
                   {shortName(member.name)}
                 </option>
@@ -235,7 +246,7 @@ export function InboxPage({ route }: { route: RouteState }) {
               <article key={task.id} className="card flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
                 <button
                   type="button"
-                  onClick={() => setStatus(task, task.status === 'Done' ? 'To Do' : 'Done')}
+                  onClick={() => void setStatus(task, task.status === 'Done' ? 'To Do' : 'Done').catch(() => undefined)}
                   className={cx(
                     'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border',
                     task.status === 'Done' ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-stone-300 text-transparent hover:border-ink',
@@ -264,7 +275,7 @@ export function InboxPage({ route }: { route: RouteState }) {
                   className="field sm:w-36"
                   aria-label={`Status for ${task.title}`}
                   value={task.status}
-                  onChange={(e) => setStatus(task, e.target.value as Status)}
+                  onChange={(e) => void setStatus(task, e.target.value as Status).catch(() => undefined)}
                 >
                   {STATUSES.map((status) => (
                     <option key={status}>{status}</option>

@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import { endOfDay, formatDate, fromDatetimeLocal, parseDate, toTimeInput } from '../lib/dates';
 import { TAG_LIST } from '../lib/tags';
 import { PRIORITIES, STATUSES, type TagId, type Task } from '../types';
+import { assignableMembers } from '../lib/utils';
 import { Button } from './ui';
 
 function fromTask(task: Task): { date: string; time: string; allDay: boolean } {
@@ -46,7 +47,7 @@ export function TaskModal() {
   if (!editing || !draft) return null;
   const isNew = !state.tasks.some((task) => task.id === editing.id);
 
-  function save() {
+  async function save() {
     if (!draft) return;
     if (!draft.title.trim()) {
       setError('Give the task a title.');
@@ -62,13 +63,17 @@ export function TaskModal() {
         deadline = fromDatetimeLocal(`${when.date}T${when.time}`)?.toISOString() ?? null;
       }
     }
-    saveTask({
-      ...draft,
-      deadline,
-      allDay,
-      helpedMemberId: draft.helpedMemberId || null,
-      recurrence: draft.recurrence === 'daily' ? 'daily' : null,
-    });
+    try {
+      await saveTask({
+        ...draft,
+        deadline,
+        allDay,
+        helpedMemberId: draft.helpedMemberId || null,
+        recurrence: draft.recurrence === 'daily' ? 'daily' : null,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save the task.');
+    }
   }
 
   return (
@@ -100,7 +105,7 @@ export function TaskModal() {
             <label className="block">
               <span className="field-label">Assignee</span>
               <select className="field" value={draft.assigneeId} onChange={(e) => setDraft({ ...draft, assigneeId: e.target.value })}>
-                {state.members.map((member) => (
+                {assignableMembers(state.members, draft.assigneeId).map((member) => (
                   <option key={member.id} value={member.id}>
                     {member.name}
                   </option>
@@ -170,7 +175,7 @@ export function TaskModal() {
                 onChange={(e) => setDraft({ ...draft, helpedMemberId: e.target.value || null })}
               >
                 <option value="">None</option>
-                {state.members
+                {assignableMembers(state.members, draft.helpedMemberId ?? undefined)
                   .filter((member) => member.id !== draft.assigneeId)
                   .map((member) => (
                     <option key={member.id} value={member.id}>
@@ -206,7 +211,14 @@ export function TaskModal() {
             {isNew ? <span /> : confirmDelete ? (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-stone-600">Delete this task?</span>
-                <Button variant="danger" onClick={() => deleteTask(draft.id)}>
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    void deleteTask(draft.id).catch((err: unknown) => {
+                      setError(err instanceof Error ? err.message : 'Could not delete the task.');
+                    });
+                  }}
+                >
                   Delete
                 </Button>
                 <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
@@ -218,7 +230,7 @@ export function TaskModal() {
                 Delete
               </Button>
             )}
-            <Button onClick={save}>Save task</Button>
+            <Button onClick={() => void save()}>Save task</Button>
           </div>
         </div>
       </div>

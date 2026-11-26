@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { CalendarDays, Inbox, LayoutDashboard, RotateCcw, Trophy, Users } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import type { Page } from '../types';
 import { cx } from '../lib/utils';
-import { Button } from './ui';
+import { Button, Modal } from './ui';
 
 const NAV: { id: Page; label: string; icon: typeof Inbox }[] = [
   { id: 'inbox', label: 'Inbox', icon: Inbox },
@@ -22,8 +23,12 @@ export function Shell({
   navigate: (page: Page) => void;
   children: ReactNode;
 }) {
-  const { reset } = useApp();
+  const { reset, currentUser, banner, clearBanner } = useApp();
+  const { signOut, changePassword } = useAuth();
   const [confirmReset, setConfirmReset] = useState(false);
+  const [resetError, setResetError] = useState('');
+  const [resetting, setResetting] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const current = NAV.find((item) => item.id === page) ?? NAV[0];
 
   useEffect(() => {
@@ -38,7 +43,7 @@ export function Shell({
           <div className="font-serif text-[1.7rem] leading-none text-white">
             Lodhi <span className="text-amber-400">HQ</span>
           </div>
-          <p className="mt-2 text-xs leading-5 text-stone-400">Muhammad Hassan Lodhi</p>
+          <p className="mt-2 text-xs leading-5 text-stone-400">{currentUser.name}</p>
         </div>
         <nav className="flex flex-1 flex-col gap-1 px-3">
           {NAV.map((item) => {
@@ -60,32 +65,75 @@ export function Shell({
             );
           })}
         </nav>
-        <div className="px-4 pb-5">
-          <p className="mb-2 text-[11px] leading-4 text-stone-500">Data stays in this browser.</p>
-          <button
-            type="button"
-            onClick={() => setConfirmReset(true)}
-            className="inline-flex items-center gap-2 text-xs text-stone-400 hover:text-white"
-          >
-            <RotateCcw size={14} />
-            Reset sample data
+        <div className="space-y-2 px-4 pb-5">
+          <p className="text-[11px] leading-4 text-stone-500">{currentUser.owner ? 'Owner' : 'Staff'} · shared board</p>
+          <button type="button" onClick={() => setPasswordOpen(true)} className="block text-xs text-stone-400 hover:text-white">
+            Change password
           </button>
+          <button type="button" onClick={() => void signOut()} className="block text-xs text-stone-400 hover:text-white">
+            Sign out
+          </button>
+          {currentUser.owner ? (
+            <button
+              type="button"
+              onClick={() => {
+                setResetError('');
+                setConfirmReset(true);
+              }}
+              className="inline-flex items-center gap-2 text-xs text-stone-400 hover:text-white"
+            >
+              <RotateCcw size={14} />
+              Reset sample data
+            </button>
+          ) : null}
         </div>
       </aside>
 
       <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-paper/95 px-4 py-3 backdrop-blur md:hidden">
+        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-line bg-paper/95 px-4 py-3 backdrop-blur md:hidden">
           <div>
             <div className="font-serif text-lg leading-none">
               Lodhi <span className="text-amber-600">HQ</span>
             </div>
             <div className="text-xs text-stone-500">{current.label}</div>
           </div>
-          <button type="button" onClick={() => setConfirmReset(true)} className="text-xs font-medium text-stone-500">
-            Reset
-          </button>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={() => setPasswordOpen(true)} className="text-xs font-medium text-stone-500">
+              Password
+            </button>
+            <button type="button" onClick={() => void signOut()} className="text-xs font-medium text-stone-500">
+              Sign out
+            </button>
+            {currentUser.owner ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setResetError('');
+                  setConfirmReset(true);
+                }}
+                className="text-xs font-medium text-stone-500"
+              >
+                Reset
+              </button>
+            ) : null}
+          </div>
         </header>
-        <main className="mx-auto w-full max-w-6xl px-4 py-5 pb-24 md:px-8 md:py-8 md:pb-10">{children}</main>
+        <main className="mx-auto w-full max-w-6xl px-4 py-5 pb-24 md:px-8 md:py-8 md:pb-10">
+          {banner ? (
+            <div
+              className={cx(
+                'mb-4 flex items-start justify-between gap-3 rounded-xl border px-3 py-2 text-sm',
+                banner.tone === 'error' ? 'border-red-200 bg-red-50 text-red-800' : 'border-emerald-200 bg-emerald-50 text-emerald-900',
+              )}
+            >
+              <p>{banner.text}</p>
+              <button type="button" className="shrink-0 text-xs font-medium underline" onClick={clearBanner}>
+                Dismiss
+              </button>
+            </div>
+          ) : null}
+          {children}
+        </main>
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 backdrop-blur md:hidden">
@@ -108,31 +156,104 @@ export function Shell({
         </div>
       </nav>
 
+      {passwordOpen ? <PasswordDialog onClose={() => setPasswordOpen(false)} onSubmit={changePassword} /> : null}
+
       {confirmReset ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button type="button" className="absolute inset-0 bg-ink/40" aria-label="Cancel reset" onClick={() => setConfirmReset(false)} />
           <div className="card relative max-w-sm p-5">
             <h2 className="font-serif text-2xl">Reset sample data?</h2>
             <p className="mt-2 text-sm text-stone-600">
-              This replaces tasks, check-ins, team edits, and rewards with a fresh sample built for today. Anything you added in this browser goes away.
+              This replaces tasks, check-ins, rewards, and staff accounts with a fresh sample for today. Your owner email and password stay. Staff added since setup are removed, and demo staff go back to the temporary password.
             </p>
+            {resetError ? <p className="mt-3 text-sm text-red-700">{resetError}</p> : null}
             <div className="mt-4 flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setConfirmReset(false)}>
+              <Button variant="ghost" onClick={() => setConfirmReset(false)} disabled={resetting}>
                 Cancel
               </Button>
               <Button
                 variant="danger"
+                disabled={resetting}
                 onClick={() => {
-                  reset();
-                  setConfirmReset(false);
+                  setResetting(true);
+                  setResetError('');
+                  void reset()
+                    .then(() => setConfirmReset(false))
+                    .catch((err: unknown) => {
+                      setResetError(err instanceof Error ? err.message : 'Could not reset.');
+                    })
+                    .finally(() => setResetting(false));
                 }}
               >
-                Reset
+                {resetting ? 'Resetting…' : 'Reset'}
               </Button>
             </div>
           </div>
         </div>
       ) : null}
     </div>
+  );
+}
+
+function PasswordDialog({
+  onClose,
+  onSubmit,
+}: {
+  onClose: () => void;
+  onSubmit: (currentPassword: string, newPassword: string) => Promise<void>;
+}) {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <Modal title="Change password" onClose={onClose}>
+      <form
+        className="space-y-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (next.length < 8) {
+            setError('Use at least 8 characters.');
+            return;
+          }
+          if (next !== confirm) {
+            setError('The new passwords do not match.');
+            return;
+          }
+          setBusy(true);
+          setError('');
+          void onSubmit(current, next)
+            .then(onClose)
+            .catch((err: unknown) => {
+              setError(err instanceof Error ? err.message : 'Could not change the password.');
+            })
+            .finally(() => setBusy(false));
+        }}
+      >
+        <label className="block">
+          <span className="field-label">Current password</span>
+          <input className="field" type="password" autoComplete="current-password" required value={current} onChange={(event) => setCurrent(event.target.value)} />
+        </label>
+        <label className="block">
+          <span className="field-label">New password</span>
+          <input className="field" type="password" autoComplete="new-password" required minLength={8} value={next} onChange={(event) => setNext(event.target.value)} />
+        </label>
+        <label className="block">
+          <span className="field-label">Confirm new password</span>
+          <input className="field" type="password" autoComplete="new-password" required minLength={8} value={confirm} onChange={(event) => setConfirm(event.target.value)} />
+        </label>
+        {error ? <p className="text-sm text-red-700">{error}</p> : null}
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={busy}>
+            {busy ? 'Saving…' : 'Update password'}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
