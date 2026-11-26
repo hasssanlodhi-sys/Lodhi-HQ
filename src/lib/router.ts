@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Page } from '../types';
 
-const PAGES: Page[] = ['inbox', 'calendar', 'dashboard', 'performance', 'team'];
+const PAGES: Page[] = ['inbox', 'calendar', 'dashboard', 'performance', 'team', 'integrations'];
 
 export interface RouteState {
   page: Page;

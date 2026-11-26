@@ -64,7 +64,7 @@ export interface AppState {
   rewards: Reward[];
 }
 
-export type Page = 'inbox' | 'calendar' | 'dashboard' | 'performance' | 'team';
+export type Page = 'inbox' | 'calendar' | 'dashboard' | 'performance' | 'team' | 'integrations';
 
 export const PRIORITIES: Priority[] = ['Urgent', 'High', 'Medium', 'Low'];
 export const STATUSES: Status[] = ['To Do', 'In Progress', 'Waiting', 'Done'];

@@ -101,6 +101,9 @@ function start_session(): void
 
 function db(): PDO
 {
+    if (isset($GLOBALS['lodhi_test_pdo']) && $GLOBALS['lodhi_test_pdo'] instanceof PDO) {
+        return $GLOBALS['lodhi_test_pdo'];
+    }
     static $pdo = null;
     if ($pdo instanceof PDO) {
         return $pdo;

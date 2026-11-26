@@ -8,6 +8,7 @@ import { CalendarPage } from './pages/CalendarPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { PerformancePage } from './pages/PerformancePage';
 import { TeamPage } from './pages/TeamPage';
+import { IntegrationsPage } from './pages/IntegrationsPage';
 import { ChangePasswordPage, SignInPage, Splash } from './pages/SignInPage';
 
 function Gate() {
@@ -39,6 +40,7 @@ function Gate() {
         {route.page === 'dashboard' && <DashboardPage route={route} />}
         {route.page === 'performance' && <PerformancePage />}
         {route.page === 'team' && <TeamPage />}
+        {route.page === 'integrations' && <IntegrationsPage />}
       </Shell>
       <TaskModal />
     </AppProvider>

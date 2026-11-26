@@ -51,6 +51,10 @@ export function taskOnTime(task: Pick<Task, 'deadline' | 'completedAt'>): boolea
   return new Date(task.completedAt).getTime() <= new Date(task.deadline).getTime();
 }
 
+export function isExternalTask(task: { id: string; notes: string }): boolean {
+  return /^(?:clickup|gcal|pos|rem)-/.test(task.id) || /\[source:\s*(?:clickup|gcal|pos|reminders):/.test(task.notes);
+}
+
 export function blankTask(partial: Partial<Task> = {}): Task {
   return {
     id: uid('task'),
