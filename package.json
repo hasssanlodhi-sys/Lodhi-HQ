@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "api": "php -S 127.0.0.1:8080 -t . scripts/php-router.php"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

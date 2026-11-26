@@ -1,0 +1,8 @@
+# Library code is included by index.php. It is not a public URL.
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Order allow,deny
+  Deny from all
+</IfModule>

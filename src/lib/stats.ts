@@ -245,20 +245,23 @@ function topBusiness(tasks: Task[], start: Date, end: Date): PerformanceStats['t
   return { tag: best.tag, name: TAGS[best.tag].short, count: best.count };
 }
 
-export function computeBadges(state: AppState, now: Date): Badge[] {
-  const early = state.checkIns.filter((c) => isBeforeSix(c.wokeUpAt)).length;
+export function computeBadges(state: AppState, now: Date, memberId = OWNER_ID): Badge[] {
+  const trackHabits = memberId === OWNER_ID;
+  const early = trackHabits ? state.checkIns.filter((c) => isBeforeSix(c.wokeUpAt)).length : 0;
   let bestGym = 0;
   let iron = false;
-  let week = startOfWeek(now);
-  for (let i = 0; i < 8; i += 1) {
-    const count = gymCount(state.checkIns, week);
-    bestGym = Math.max(bestGym, count);
-    if (count >= GYM_WEEKLY_TARGET) iron = true;
-    week = addDays(week, -7);
+  if (trackHabits) {
+    let week = startOfWeek(now);
+    for (let i = 0; i < 8; i += 1) {
+      const count = gymCount(state.checkIns, week);
+      bestGym = Math.max(bestGym, count);
+      if (count >= GYM_WEEKLY_TARGET) iron = true;
+      week = addDays(week, -7);
+    }
   }
-  const zero = finishedWeekStarts(now).some((start) => isCleanWeek(start, state.tasks, OWNER_ID, now));
+  const zero = finishedWeekStarts(now).some((start) => isCleanWeek(start, state.tasks, memberId, now));
   const helped = state.tasks.filter(
-    (task) => task.assigneeId === OWNER_ID && task.status === 'Done' && task.helpedMemberId,
+    (task) => task.assigneeId === memberId && task.status === 'Done' && task.helpedMemberId,
   ).length;
   return [
     {
@@ -292,14 +295,15 @@ export function computeBadges(state: AppState, now: Date): Badge[] {
   ];
 }
 
-export function performanceStats(state: AppState, now = new Date()): PerformanceStats {
-  const mine = state.tasks.filter((task) => task.assigneeId === OWNER_ID && task.status === 'Done');
+export function performanceStats(state: AppState, now = new Date(), memberId = OWNER_ID): PerformanceStats {
+  const trackHabits = memberId === OWNER_ID;
+  const mine = state.tasks.filter((task) => task.assigneeId === memberId && task.status === 'Done');
   const lateCount = mine.filter((task) => task.onTime === false).length;
   const onTimeCount = mine.length - lateCount;
-  const habits = state.checkIns.reduce((sum, entry) => sum + habitsOn(entry), 0);
-  const perfectWeeks = finishedWeekStarts(now).filter((start) =>
-    isPerfectWeek(start, state.tasks, state.checkIns, OWNER_ID, now),
-  ).length;
+  const habits = trackHabits ? state.checkIns.reduce((sum, entry) => sum + habitsOn(entry), 0) : 0;
+  const perfectWeeks = trackHabits
+    ? finishedWeekStarts(now).filter((start) => isPerfectWeek(start, state.tasks, state.checkIns, memberId, now)).length
+    : 0;
   const points =
     onTimeCount * POINTS.onTime +
     lateCount * POINTS.late +
@@ -314,12 +318,12 @@ export function performanceStats(state: AppState, now = new Date()): Performance
 
   const weekStart = startOfWeek(now);
   const weekEnd = addDays(weekStart, 7);
-  const personal = weekCompleted(state.tasks, weekStart, weekEnd, OWNER_ID);
+  const personal = weekCompleted(state.tasks, weekStart, weekEnd, memberId);
   const personalOnTimeRate = rateOf(personal);
   const business = topBusiness(state.tasks, weekStart, weekEnd);
-  const streak = wakeStreak(state.checkIns, now);
-  const owner = state.members.find((member) => member.id === OWNER_ID);
-  const first = owner?.name.split(' ')[0] || 'Muhammad';
+  const streak = trackHabits ? wakeStreak(state.checkIns, now) : 0;
+  const person = state.members.find((member) => member.id === memberId);
+  const first = person?.name.split(' ')[0] || 'Muhammad';
   const businessSentence = business
     ? ` Top business: ${business.name} – ${business.count} task${business.count === 1 ? '' : 's'} closed.`
     : '';
@@ -346,7 +350,7 @@ export function performanceStats(state: AppState, now = new Date()): Performance
     nextLevel: next?.name ?? null,
     nextLevelMin: next?.min ?? null,
     levelProgress,
-    badges: computeBadges(state, now),
+    badges: computeBadges(state, now, memberId),
     appreciation,
     shoutouts,
     wakeStreak: streak,
@@ -362,7 +366,7 @@ function lastNDays(now: Date, days: number): Date[] {
   return dates;
 }
 
-export function dashboardStats(state: AppState, now = new Date()): DashboardStats {
+export function dashboardStats(state: AppState, now = new Date(), memberId = OWNER_ID): DashboardStats {
   const today = startOfDay(now);
   const weekStart = startOfWeek(now);
   const weekEnd = addDays(weekStart, 7);
@@ -431,7 +435,7 @@ export function dashboardStats(state: AppState, now = new Date()): DashboardStat
     gymStreakWeeks: gymStreakWeeks(state.checkIns, now),
     gymThisWeek: gymCount(state.checkIns, weekStart),
     gymTarget: GYM_WEEKLY_TARGET,
-    punctualityStreak: punctualityStreak(state.tasks, OWNER_ID, now),
+    punctualityStreak: punctualityStreak(state.tasks, memberId, now),
     completionByTag,
     onTimeTrend,
     leaderboard,

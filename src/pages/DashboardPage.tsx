@@ -2,19 +2,20 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AlarmClock, Dumbbell, Sun } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { RouteState } from '../lib/router';
-import { formatDate, formatFullDate, formatShortDate, greeting, parseDate } from '../lib/dates';
+import { addDays, formatDate, formatFullDate, formatShortDate, greeting, parseDate, startOfDay } from '../lib/dates';
+import { fetchCompletions, type CompletionRow } from '../lib/api';
 import { dashboardStats } from '../lib/stats';
 import { TAGS } from '../lib/tags';
 import type { Mood } from '../types';
-import { OWNER_ID } from '../types';
 import { cx, memberName, shortName } from '../lib/utils';
 import { Button, PageHeader } from '../components/ui';
 
 export function DashboardPage({ route }: { route: RouteState }) {
-  const { state, now, saveCheckIn } = useApp();
-  const stats = useMemo(() => dashboardStats(state, now), [state, now]);
-  const owner = state.members.find((member) => member.id === OWNER_ID);
-  const first = owner ? shortName(owner.name) : 'Muhammad';
+  const { state, now, saveCheckIn, currentUser } = useApp();
+  const stats = useMemo(() => dashboardStats(state, now, currentUser.id), [state, now, currentUser.id]);
+  const me = state.members.find((member) => member.id === currentUser.id);
+  const first = shortName(me?.name || currentUser.name);
+  const [remoteBoard, setRemoteBoard] = useState<CompletionRow[] | null>(null);
   const [date, setDate] = useState(() => formatDate(now));
   const existing = state.checkIns.find((item) => item.date === date);
   const [woke, setWoke] = useState(existing?.wokeUpAt ?? '05:30');
@@ -32,6 +33,24 @@ export function DashboardPage({ route }: { route: RouteState }) {
   }, [date, state.checkIns]);
 
   const recent = [...state.checkIns].sort((a, b) => a.date.localeCompare(b.date)).slice(-14);
+
+  useEffect(() => {
+    if (currentUser.owner) return;
+    let cancelled = false;
+    const today = startOfDay(now);
+    void fetchCompletions(addDays(today, -29).toISOString(), addDays(today, 1).toISOString())
+      .then((rows) => {
+        if (!cancelled) setRemoteBoard(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setRemoteBoard([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser.owner, now]);
+
+  const leaderboard = currentUser.owner ? stats.leaderboard : remoteBoard;
 
   return (
     <div>
@@ -68,23 +87,30 @@ export function DashboardPage({ route }: { route: RouteState }) {
       <div className="mt-3 grid gap-3 md:grid-cols-3">
         <StreakCard icon={<Sun size={18} />} label="Wake-up" value={`${stats.wakeStreak} days`} detail="Target: up before 6:00 AM" />
         <StreakCard icon={<Dumbbell size={18} />} label="Gym" value={`${stats.gymThisWeek}/${stats.gymTarget} this week`} detail={`${stats.gymStreakWeeks}-week streak at the target`} />
-        <StreakCard icon={<AlarmClock size={18} />} label="Punctuality" value={`${stats.punctualityStreak} days`} detail="No late tasks for Muhammad" />
+        <StreakCard icon={<AlarmClock size={18} />} label="Punctuality" value={`${stats.punctualityStreak} days`} detail={`No late tasks for ${first}`} />
       </div>
 
+      {currentUser.owner ? (
       <form
         className="card mt-4 p-4"
         onSubmit={(event) => {
           event.preventDefault();
           if (!woke) return;
-          saveCheckIn({
-            id: existing?.id ?? `check_${date}`,
-            date,
-            wokeUpAt: woke,
-            gymDone: gym,
-            arrivedOnTime: arrived,
-            mood,
-          });
-          setSaved(true);
+          void (async () => {
+          try {
+            await saveCheckIn({
+              id: existing?.id ?? `check_${date}`,
+              date,
+              wokeUpAt: woke,
+              gymDone: gym,
+              arrivedOnTime: arrived,
+              mood,
+            });
+            setSaved(true);
+          } catch {
+            setSaved(false);
+          }
+          })();
         }}
       >
         <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
@@ -144,6 +170,12 @@ export function DashboardPage({ route }: { route: RouteState }) {
           ))}
         </div>
       </form>
+      ) : (
+        <section className="card mt-4 p-4">
+          <h2 className="font-serif text-2xl">Daily check-in</h2>
+          <p className="text-sm text-stone-500">Wake-up, gym, and arrival stay with the owner. The streaks above read that log.</p>
+        </section>
+      )}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <section className="card p-4">
@@ -162,14 +194,15 @@ export function DashboardPage({ route }: { route: RouteState }) {
         <h2 className="font-serif text-2xl">Team leaderboard</h2>
         <p className="mb-2 text-sm text-stone-500">Closed tasks and on-time rate over the last 30 days.</p>
         <div className="divide-y divide-line">
-          {stats.leaderboard.map((row) => {
+          {leaderboard === null ? <p className="py-3 text-sm text-stone-500">Loading team totals…</p> : null}
+          {(leaderboard ?? []).map((row) => {
             const member = state.members.find((item) => item.id === row.memberId);
             return (
               <div key={row.memberId} className="grid grid-cols-[1fr_auto] items-center gap-3 py-3">
                 <div>
                   <div className="font-medium">
                     {member ? memberName(state.members, row.memberId) : 'Unknown'}
-                    {row.memberId === OWNER_ID ? <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-900">You</span> : null}
+                    {row.memberId === currentUser.id ? <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-900">You</span> : null}
                   </div>
                   <div className="text-xs text-stone-500">{member?.role}</div>
                   <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-stone-100">
