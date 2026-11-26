@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { CalendarDays, Inbox, LayoutDashboard, RotateCcw, Trophy, Users } from 'lucide-react';
+import { CalendarDays, Inbox, LayoutDashboard, Plug, RotateCcw, Trophy, Users } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import type { Page } from '../types';
@@ -29,7 +29,9 @@ export function Shell({
   const [resetError, setResetError] = useState('');
   const [resetting, setResetting] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
-  const current = NAV.find((item) => item.id === page) ?? NAV[0];
+  const current = page === 'integrations'
+    ? { id: 'integrations' as const, label: 'Integrations', icon: Plug }
+    : (NAV.find((item) => item.id === page) ?? NAV[0]);
 
   useEffect(() => {
     document.title = `${current.label} · Lodhi HQ`;
@@ -64,6 +66,17 @@ export function Shell({
               </button>
             );
           })}
+          <button
+            type="button"
+            onClick={() => navigate('integrations')}
+            className={cx(
+              'mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm',
+              page === 'integrations' ? 'bg-white/10 text-white' : 'text-stone-400 hover:bg-white/5 hover:text-white',
+            )}
+          >
+            <Plug size={18} />
+            Integrations
+          </button>
         </nav>
         <div className="space-y-2 px-4 pb-5">
           <p className="text-[11px] leading-4 text-stone-500">{currentUser.owner ? 'Owner' : 'Staff'} · shared board</p>
@@ -98,6 +111,9 @@ export function Shell({
             <div className="text-xs text-stone-500">{current.label}</div>
           </div>
           <div className="flex items-center gap-3">
+            <button type="button" onClick={() => navigate('integrations')} className={cx('text-xs font-medium', page === 'integrations' ? 'text-ink' : 'text-stone-500')}>
+              Sync
+            </button>
             <button type="button" onClick={() => setPasswordOpen(true)} className="text-xs font-medium text-stone-500">
               Password
             </button>

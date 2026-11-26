@@ -12,7 +12,7 @@ import {
   type CurrentUser,
 } from '../lib/api';
 import type { AppState, CheckIn, Member, Reward, Status, Task } from '../types';
-import { blankTask, uid } from '../lib/utils';
+import { blankTask, isExternalTask, uid } from '../lib/utils';
 import { useAuth } from './AuthContext';
 import { Button } from '../components/ui';
 import { Splash } from '../pages/SignInPage';
@@ -63,7 +63,7 @@ function saveTask(state: AppState, incoming: Task, now: Date): AppState {
     task = { ...task, completedAt: null, onTime: null };
   }
   let tasks = existing ? state.tasks.map((item) => (item.id === task.id ? task : item)) : [task, ...state.tasks];
-  if (becameDone && task.recurrence === 'daily') {
+  if (becameDone && task.recurrence === 'daily' && !isExternalTask(task)) {
     const next = nextDaily(task, now);
     const already = tasks.some(
       (item) =>
@@ -146,6 +146,7 @@ interface AppContextValue {
   saveReward: (reward: Reward) => Promise<void>;
   deleteReward: (id: string) => Promise<void>;
   reset: () => Promise<void>;
+  reload: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -218,8 +219,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const prev = stateRef.current;
       if (!prev) return;
       const next = reducer(prev, action);
+      let warnings: string[] = [];
       try {
-        await persistDiff(prev, next);
+        warnings = await persistDiff(prev, next);
       } catch (err) {
         const text = err instanceof Error ? err.message : 'Could not save.';
         setBanner({ tone: 'error', text });
@@ -232,7 +234,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       stateRef.current = next;
       setState(next);
-      setBanner((current) => (current?.tone === 'error' ? null : current));
+      if (warnings.length > 0) {
+        setBanner({ tone: 'info', text: warnings[0] });
+      } else {
+        setBanner((current) => (current?.tone === 'error' ? null : current));
+      }
     });
   }
 
@@ -302,6 +308,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
         });
       },
+      reload: () => enqueue(async () => {
+        await refreshFromServer();
+      }),
       reset: async () => {
         await enqueue(async () => {
           try {

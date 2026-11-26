@@ -5,6 +5,7 @@ declare(strict_types=1);
 require __DIR__ . '/lib/bootstrap.php';
 require __DIR__ . '/lib/auth.php';
 require __DIR__ . '/lib/repository.php';
+require __DIR__ . '/lib/load_integrations.php';
 
 try {
     start_session();
@@ -90,6 +91,9 @@ function dispatch(): void
     }
     if ($method === 'POST' && preg_match('#^/members/([^/]+)/active$#', $path, $m)) {
         handle_member_active(rawurldecode($m[1]));
+    }
+    if (integrations_try($method, $path)) {
+        return;
     }
 
     throw new HttpException(404, 'Not found.');
@@ -211,7 +215,14 @@ function handle_task_update(string $id): void
     if (!$row) {
         throw new HttpException(500, 'Something went wrong.');
     }
-    json_ok(['task' => task_json($row)]);
+    $payload = ['task' => task_json($row)];
+    if ($existing['status'] !== 'Done' && $row['status'] === 'Done') {
+        $warning = integration_push_done($row);
+        if ($warning) {
+            $payload['syncWarning'] = $warning;
+        }
+    }
+    json_ok($payload);
 }
 
 function handle_task_delete(string $id): void

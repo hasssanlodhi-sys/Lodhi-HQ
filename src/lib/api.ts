@@ -104,7 +104,7 @@ export function createTask(task: Task): Promise<{ task: Task }> {
   return request('/tasks', { method: 'POST', body: JSON.stringify(task) });
 }
 
-export function updateTask(task: Task): Promise<{ task: Task }> {
+export function updateTask(task: Task): Promise<{ task: Task; syncWarning?: string }> {
   return request(`/tasks/${encodeURIComponent(task.id)}`, { method: 'PUT', body: JSON.stringify(task) });
 }
 
@@ -153,13 +153,75 @@ export function fetchCompletions(from: string, to: string): Promise<CompletionRo
   ).then((data) => data.rows);
 }
 
-export async function persistDiff(prev: AppState, next: AppState): Promise<void> {
+export interface IntegrationRecord {
+  id: string;
+  provider: 'clickup' | 'gcal' | 'pos' | 'reminders';
+  userId: string;
+  userName: string;
+  enabled: boolean;
+  configured: boolean;
+  settings: Record<string, unknown>;
+  lastSyncAt: string | null;
+  lastError: string | null;
+  lastSummary: string | null;
+}
+
+export interface IntegrationsPayload {
+  needsMigration: boolean;
+  integrations: IntegrationRecord[];
+  viewerId: string;
+  owner: boolean;
+}
+
+export interface MigrationStatus {
+  applied: string[];
+  pending: string[];
+}
+
+export interface SyncResult {
+  ok?: boolean;
+  skipped?: boolean | string;
+  summary?: string;
+  error?: string | null;
+}
+
+export function loadIntegrations(): Promise<IntegrationsPayload> {
+  return request('/integrations');
+}
+
+export function saveIntegration(
+  provider: IntegrationRecord['provider'],
+  body: { enabled: boolean; settings: Record<string, unknown>; secrets?: Record<string, string> },
+): Promise<{ integration: IntegrationRecord }> {
+  return request(`/integrations/${provider}`, { method: 'PUT', body: JSON.stringify(body) });
+}
+
+export function syncNow(provider?: string): Promise<{ ok: boolean; skipped?: string; results: Record<string, SyncResult> }> {
+  return request('/integrations/sync', { method: 'POST', body: JSON.stringify({ provider: provider ?? '' }) });
+}
+
+export function discoverIntegration(provider: 'clickup' | 'pos' | 'reminders', body: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+  return request(`/integrations/${provider}/discover`, { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function loadMigrations(): Promise<MigrationStatus> {
+  return request('/migrations');
+}
+
+export function runMigrations(): Promise<{ appliedNow: string[]; status: MigrationStatus }> {
+  return request('/migrations/run', { method: 'POST', body: '{}' });
+}
+
+export async function persistDiff(prev: AppState, next: AppState): Promise<string[]> {
+  const warnings: string[] = [];
   const prevTaskIds = new Set(prev.tasks.map((task) => task.id));
   const nextTaskIds = new Set(next.tasks.map((task) => task.id));
   for (const task of next.tasks) {
     if (prev.tasks.includes(task)) continue;
-    if (prevTaskIds.has(task.id)) await updateTask(task);
-    else await createTask(task);
+    if (prevTaskIds.has(task.id)) {
+      const saved = await updateTask(task);
+      if (saved.syncWarning) warnings.push(saved.syncWarning);
+    } else await createTask(task);
   }
   for (const id of prevTaskIds) {
     if (!nextTaskIds.has(id)) await removeTask(id);
@@ -179,4 +241,5 @@ export async function persistDiff(prev: AppState, next: AppState): Promise<void>
   for (const id of prevRewardIds) {
     if (!nextRewardIds.has(id)) await removeReward(id);
   }
+  return warnings;
 }
